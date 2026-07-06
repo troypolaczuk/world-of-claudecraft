@@ -309,11 +309,15 @@ export function setActiveWorldContent(world: WorldContent | null): void {
 }
 
 // Zone containing a world position (overworld only; clamps to the strip ends).
+// Reads the ACTIVE world's zones so a custom-map playtest resolves its own
+// zones (names, graveyards, pois) instead of the built-in strip's; the base
+// game and the server never swap the active world, so nothing changes there.
 export function zoneAt(z: number): ZoneDef {
-  for (const zone of ZONES) {
+  const zones = activeWorld.zones;
+  for (const zone of zones) {
     if (z < zone.zMax) return zone;
   }
-  return ZONES[ZONES.length - 1];
+  return zones[zones.length - 1];
 }
 
 export function zoneWelcomeText(

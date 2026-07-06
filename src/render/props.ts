@@ -625,6 +625,14 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
   const group = new THREE.Group();
   const flames: THREE.Mesh[] = [];
   const fireLights: THREE.PointLight[] = [];
+  if (getActiveWorldContent().presentationMode === 'blank') {
+    return {
+      group,
+      flames,
+      fireLights,
+      update(): void {},
+    };
+  }
 
   const ground = (x: number, z: number) => terrainHeight(x, z, seed);
 

@@ -214,8 +214,23 @@ function staticWorldColliders(seed: number): Collider[] {
   // Editor-placed assets with a collide footprint (custom maps only; the
   // built-in world has no placements). The ONE placement record drives both the
   // renderer and this collider, so what you see is what you collide with.
+  // Default footprint is a circle; the authored 'square' shape becomes a
+  // yaw-following OBB whose half-extents equal the radius.
   for (const p of content.placements ?? []) {
     if (!p.collideRadius || p.collideRadius <= 0) continue;
+    if (p.collideShape === 'square') {
+      out.push({
+        type: 'obb',
+        x: p.x,
+        z: p.z,
+        hw: p.collideRadius,
+        hd: p.collideRadius,
+        rot: p.rotY,
+        cameraTopY: topY(seed, p.x, p.z, Math.max(2.5, p.collideRadius * 2)),
+        camGhost: true,
+      });
+      continue;
+    }
     out.push({
       type: 'circle',
       x: p.x,
@@ -248,6 +263,35 @@ function staticWorldColliders(seed: number): Collider[] {
       cameraTopY: topY(seed, x, z, BLOCKER_WALL_HEIGHT),
       camGhost: true,
     });
+  }
+
+  // Editor-authored collider volumes (custom maps only): boxes and walls are
+  // full-height OBBs (a jump never clears one), spheres are circles. Planes do
+  // not block movement; they raise the walkable floor instead (see
+  // world.groundHeight). camGhost like blockers: no mesh in playtest, so the
+  // chase cam never pulls in for one.
+  for (const v of content.colliderVolumes ?? []) {
+    if (v.kind === 'box' || v.kind === 'wall') {
+      out.push({
+        type: 'obb',
+        x: v.x,
+        z: v.z,
+        hw: v.sizeX / 2,
+        hd: v.sizeZ / 2,
+        rot: v.rotY,
+        cameraTopY: topY(seed, v.x, v.z, Math.max(1, v.sizeY)),
+        camGhost: true,
+      });
+    } else if (v.kind === 'sphere') {
+      out.push({
+        type: 'circle',
+        x: v.x,
+        z: v.z,
+        r: v.sizeX / 2,
+        cameraTopY: topY(seed, v.x, v.z, Math.max(1, v.sizeX)),
+        camGhost: true,
+      });
+    }
   }
   return out;
 }

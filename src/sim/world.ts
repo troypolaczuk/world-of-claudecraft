@@ -50,6 +50,7 @@ interface WorldDerived {
   ridges: { z: number; passX: number }[];
   minZ: number;
   maxZ: number;
+  halfX: number;
 }
 let derivedCache: WorldDerived | null = null;
 function world(): WorldDerived {
@@ -64,6 +65,9 @@ function world(): WorldDerived {
       ridges,
       minZ: content.zones[0].zMin,
       maxZ: content.zones[content.zones.length - 1].zMax,
+      // Custom maps may narrow (or widen) the x extent; the built-in world
+      // keeps its constant, so its heightfield stays byte-identical.
+      halfX: content.worldHalfX ?? WORLD_MAX_X,
     };
   }
   return derivedCache;
@@ -241,16 +245,25 @@ export const BIOME_BY_ID: BiomeId[] = [
   'cave',
 ];
 
-// The painted biome at (x,z), or null if unpainted / no paint layer. Cheap grid
-// lookup; absent for the built-in world.
-function paintedBiomeAt(x: number, z: number): BiomeId | null {
+/** The raw painted cell id at (x,z) (built-in biome id OR a custom swatch id),
+ *  or null when unpainted / no paint layer. The renderer colors custom-swatch
+ *  cells directly; the sim's biome logic only follows built-in ids. */
+export function paintedCellIdAt(x: number, z: number): number | null {
   const bp = world().content.biomePaint;
   if (!bp) return null;
   const c = Math.floor((x - bp.originX) / bp.cell);
   const r = Math.floor((z - bp.originZ) / bp.cell);
   if (c < 0 || c >= bp.cols || r < 0 || r >= bp.rows) return null;
   const id = bp.ids[r * bp.cols + c];
-  return id >= 0 && id < BIOME_BY_ID.length ? BIOME_BY_ID[id] : null;
+  return id === 255 ? null : id;
+}
+
+// The painted biome at (x,z), or null if unpainted / no paint layer / a custom
+// color swatch (custom cells keep the zone biome's shape and gameplay biome:
+// color-only painting). Cheap grid lookup; absent for the built-in world.
+function paintedBiomeAt(x: number, z: number): BiomeId | null {
+  const id = paintedCellIdAt(x, z);
+  return id !== null && id >= 0 && id < BIOME_BY_ID.length ? BIOME_BY_ID[id] : null;
 }
 
 // Biome at a world point: the painted override if any, else the zone-band biome.
@@ -259,15 +272,12 @@ export function biomeAt(x: number, z: number): BiomeId {
   return paintedBiomeAt(x, z) ?? zoneBiomeAt(z);
 }
 
-// Blended biome shape at a point. A painted cell hard-overrides to that biome's
-// shape; otherwise zone interiors keep their exact shape and blend across ±~35yd
-// windows at the band boundaries. With no paint this equals the old shapeAt(z).
-function shapeAt(x: number, z: number): { hill: number; base: number } {
-  const painted = paintedBiomeAt(x, z);
-  if (painted) {
-    const s = BIOME_SHAPE[painted];
-    return { hill: s.hill, base: s.base };
-  }
+// Blended biome shape at a point: zone interiors keep their exact shape and
+// blend across ±~35yd windows at the band boundaries. Biome PAINT deliberately
+// does NOT participate: painting is texture/color only and must never reshape
+// the terrain (it used to hard-override the shape per 8yd cell, which both
+// deformed sculpted ground and read as terraced blocks).
+function shapeAt(_x: number, z: number): { hill: number; base: number } {
   const zones = world().content.zones;
   let hill = BIOME_SHAPE[zones[0].biome].hill;
   let base = BIOME_SHAPE[zones[0].biome].base;
@@ -313,10 +323,60 @@ function baseHeight(x: number, z: number, seed: number): number {
   return h;
 }
 
-// Ground height including instanced dungeon floors (flat, far off-world).
+// Ground height including instanced dungeon floors (flat, far off-world) and
+// editor-authored floor planes (custom maps only): inside a plane's rotated
+// footprint the walkable floor is raised to the plane's level (the terrain
+// height at its center plus its offset), never lowered, so movers step onto a
+// flat room floor and off it again. The built-in world carries no volumes, so
+// its path is unchanged.
 export function groundHeight(x: number, z: number, seed: number): number {
   if (x > DUNGEON_X_THRESHOLD) return DUNGEON_FLOOR_Y;
-  return terrainHeight(x, z, seed);
+  let h = terrainHeight(x, z, seed);
+  const vols = world().content.colliderVolumes;
+  if (vols) {
+    for (const v of vols) {
+      if (v.kind !== 'plane') continue;
+      const dx = x - v.x;
+      const dz = z - v.z;
+      if (!v.rotX && !v.rotZ) {
+        // Flat plane: into its local frame (three.js rotation.y convention, the
+        // same math as sim/colliders.ts rotY with -rot).
+        const c = Math.cos(v.rotY);
+        const s = Math.sin(v.rotY);
+        const lx = dx * c - dz * s;
+        const lz = dx * s + dz * c;
+        if (Math.abs(lx) > v.sizeX / 2 || Math.abs(lz) > v.sizeZ / 2) continue;
+        const floor = terrainHeight(v.x, v.z, seed) + v.sizeY;
+        if (floor > h) h = floor;
+        continue;
+      }
+      // Tilted plane (a ramp): surface points are center + lx*u + lz*w, where
+      // u/w are the rotated local X/Z axes under R = Rx(rotX)*Ry(rotY)*Rz(rotZ)
+      // (three.js Euler 'XYZ', matching the editor overlay mesh). Solve the 2x2
+      // system for (lx, lz) from the world XZ offset, bounds-check the
+      // footprint, then read the surface height at that spot.
+      const ca = Math.cos(v.rotX ?? 0);
+      const sa = Math.sin(v.rotX ?? 0);
+      const cb = Math.cos(v.rotY);
+      const sb = Math.sin(v.rotY);
+      const cg = Math.cos(v.rotZ ?? 0);
+      const sg = Math.sin(v.rotZ ?? 0);
+      const ux = cb * cg;
+      const uy = ca * sg + sa * sb * cg;
+      const uz = sa * sg - ca * sb * cg;
+      const wx = sb;
+      const wy = -sa * cb;
+      const wz = ca * cb;
+      const det = ux * wz - wx * uz;
+      if (Math.abs(det) < 1e-6) continue; // near-vertical: no walkable surface
+      const lx = (dx * wz - wx * dz) / det;
+      const lz = (ux * dz - dx * uz) / det;
+      if (Math.abs(lx) > v.sizeX / 2 || Math.abs(lz) > v.sizeZ / 2) continue;
+      const floor = terrainHeight(v.x, v.z, seed) + v.sizeY + lx * uy + lz * wy;
+      if (floor > h) h = floor;
+    }
+  }
+  return h;
 }
 
 export function terrainHeight(x: number, z: number, seed: number): number {
@@ -348,7 +408,7 @@ export function terrainHeight(x: number, z: number, seed: number): number {
   }
 
   // Raise the world rim so the player naturally stays in bounds
-  const rimX = smoothstep(WORLD_MAX_X - 30, WORLD_MAX_X, Math.abs(x));
+  const rimX = smoothstep(w.halfX - 30, w.halfX, Math.abs(x));
   const rimS = smoothstep(w.minZ + 30, w.minZ, z);
   const rimN = smoothstep(w.maxZ - 30, w.maxZ, z);
   const rim = Math.max(rimX, rimS, rimN);
@@ -412,9 +472,10 @@ export function zoneBiomeAt(z: number): BiomeId {
 
 export function generateDecorations(seed: number): Decoration[] {
   const w = world();
+  if (w.content.decorationsMode === 'empty') return [];
   const out: Decoration[] = [];
   const step = 10;
-  const xHalf = WORLD_MAX_X - 14;
+  const xHalf = w.halfX - 14;
   for (let gx = -xHalf; gx < xHalf; gx += step) {
     for (let gz = w.minZ + 14; gz < w.maxZ - 14; gz += step) {
       const r = hash2(Math.round(gx), Math.round(gz), seed + 31);

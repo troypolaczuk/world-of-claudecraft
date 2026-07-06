@@ -4,7 +4,7 @@
 
 /** Placement scale bounds shared by the inspector sliders and the wheel path. */
 export const PLACEMENT_SCALE_MIN = 0.2;
-export const PLACEMENT_SCALE_MAX = 5;
+export const PLACEMENT_SCALE_MAX = 50;
 
 /** One Shift+wheel tick rotates by 15 degrees. */
 export const ROTATE_STEP_RAD = Math.PI / 12;

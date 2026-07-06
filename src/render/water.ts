@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SIZE, ZONES } from '../sim/data';
+import { getActiveWorldContent, WORLD_MAX_Z, WORLD_MIN_Z, WORLD_SIZE, ZONES } from '../sim/data';
+import { MIN_WATER_LEVEL } from '../sim/map_doc';
 import { waterLevel } from '../sim/world';
 import { loadTexture } from './assets/loader';
 import { registerPreload } from './assets/preload';
@@ -177,20 +178,24 @@ function buildShaderWater(seed: number): WaterView {
   };
 
   const meshes: THREE.Mesh[] = [];
-  for (const zone of ZONES) {
+  // Active-content extents: a sized custom map's water covers exactly its own
+  // rect (the built-in world's zones/width match the constants, so its build
+  // is unchanged).
+  const content = getActiveWorldContent();
+  const width = (content.worldHalfX ?? WORLD_SIZE / 2) * 2;
+  const zones = content.zones.length > 0 ? content.zones : ZONES;
+  for (const zone of zones) {
     const depth = zone.zMax - zone.zMin;
-    const geo = new THREE.PlaneGeometry(
-      WORLD_SIZE,
-      depth,
-      SEGMENTS_PER_ZONE,
-      SEGMENTS_PER_ZONE,
-    ).rotateX(-Math.PI / 2);
+    const geo = new THREE.PlaneGeometry(width, depth, SEGMENTS_PER_ZONE, SEGMENTS_PER_ZONE).rotateX(
+      -Math.PI / 2,
+    );
     geo.translate(0, 0, (zone.zMin + zone.zMax) / 2);
     fillShoreDepth(geo);
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.y = waterLevel();
+    mesh.visible = waterVisible();
     meshes.push(mesh);
   }
   return {
@@ -198,8 +203,10 @@ function buildShaderWater(seed: number): WaterView {
     update: () => {},
     setLevel(): void {
       const y = waterLevel();
+      const visible = waterVisible();
       for (const mesh of meshes) {
         mesh.position.y = y;
+        mesh.visible = visible;
         // vertices never move (only the attribute + the mesh transform change),
         // so the baked bounding volumes stay valid.
         fillShoreDepth(mesh.geometry);
@@ -223,12 +230,16 @@ function buildPhongWater(): WaterView {
     normalMap: norm,
     normalScale: new THREE.Vector2(0.8, 0.8),
   });
-  const worldDepth = WORLD_MAX_Z - WORLD_MIN_Z;
+  const content = getActiveWorldContent();
+  const width = (content.worldHalfX ?? WORLD_SIZE / 2) * 2;
+  const zMin = content.zones[0]?.zMin ?? WORLD_MIN_Z;
+  const zMax = content.zones[content.zones.length - 1]?.zMax ?? WORLD_MAX_Z;
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD_SIZE, worldDepth).rotateX(-Math.PI / 2),
+    new THREE.PlaneGeometry(width, zMax - zMin).rotateX(-Math.PI / 2),
     mat,
   );
-  mesh.position.set(0, waterLevel(), (WORLD_MIN_Z + WORLD_MAX_Z) / 2);
+  mesh.position.set(0, waterLevel(), (zMin + zMax) / 2);
+  mesh.visible = waterVisible();
   return {
     meshes: [mesh],
     update(time: number): void {
@@ -239,8 +250,16 @@ function buildPhongWater(): WaterView {
     },
     setLevel(): void {
       mesh.position.y = waterLevel();
+      mesh.visible = waterVisible();
     },
   };
+}
+
+/** The editor's blank/flat maps park the level at the sanitizer minimum to
+ *  mean "no water"; the surface is hidden there instead of floating far
+ *  under the world. */
+function waterVisible(): boolean {
+  return waterLevel() > MIN_WATER_LEVEL + 1e-6;
 }
 
 export function buildWater(seed: number): WaterView {

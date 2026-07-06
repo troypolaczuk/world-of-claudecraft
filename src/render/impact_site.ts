@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DUNGEON_X_THRESHOLD } from '../sim/data';
+import { DUNGEON_X_THRESHOLD, getActiveWorldContent } from '../sim/data';
 import { hash2 } from '../sim/rng';
 import { MIREFEN_IMPACT_CRATER, terrainHeight } from '../sim/world';
 import { GFX } from './gfx';
@@ -372,6 +372,12 @@ function buildEmbers(seed: number): { points: THREE.Points; material: THREE.Poin
 export function buildImpactSite(seed: number): ImpactSiteView {
   const group = new THREE.Group();
   group.name = 'mirefen-impact-site';
+  if (getActiveWorldContent().presentationMode === 'blank') {
+    const light = new THREE.PointLight(0xff6a1a, 0, 0, 2);
+    light.name = 'mirefen-impact-light';
+    light.userData.baseIntensity = 0;
+    return { group, light, update(): void {} };
+  }
 
   const scorch = new THREE.Mesh(buildScorchGeometry(seed), craterDecalMaterial());
   scorch.name = 'mirefen-impact-scorch';

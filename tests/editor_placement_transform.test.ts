@@ -95,7 +95,7 @@ describe('scaleStep', () => {
 
   it('clamps to the inspector slider bounds', () => {
     expect(scaleStep(PLACEMENT_SCALE_MAX, -100)).toBe(PLACEMENT_SCALE_MAX);
-    expect(scaleStep(4.9, -100)).toBe(PLACEMENT_SCALE_MAX);
+    expect(scaleStep(49.9, -100)).toBe(PLACEMENT_SCALE_MAX);
     expect(scaleStep(PLACEMENT_SCALE_MIN, 100)).toBe(PLACEMENT_SCALE_MIN);
     expect(scaleStep(0.21, 100)).toBe(PLACEMENT_SCALE_MIN);
   });

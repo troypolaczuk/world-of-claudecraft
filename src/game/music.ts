@@ -5,6 +5,7 @@
 // Each theme is a composed multi-track loop scheduled with a lookahead
 // timer; zone changes crossfade.
 
+import { getActiveWorldContent } from '../sim/data';
 import type { BiomeId } from '../sim/types';
 
 export type MusicZone =
@@ -18,6 +19,50 @@ export type MusicZone =
   | 'dungeon_hollow_crypt'
   | 'dungeon_sunken_bastion'
   | 'dungeon_gravewyrm_sanctum';
+
+/** Every pickable track (the map editor's music tool lists these). */
+export const MUSIC_ZONES: readonly MusicZone[] = [
+  'town_eastbrook',
+  'town_fenbridge',
+  'town_highwatch',
+  'vale',
+  'vale_legacy',
+  'marsh',
+  'peaks',
+  'dungeon_hollow_crypt',
+  'dungeon_sunken_bastion',
+  'dungeon_gravewyrm_sanctum',
+];
+
+export function isMusicZone(v: string): v is MusicZone {
+  return (MUSIC_ZONES as readonly string[]).includes(v);
+}
+
+/**
+ * Map-authored music (WorldContent.music) at a world position: the smallest
+ * containing music AREA wins (so a camp inside a forest region can have its
+ * own theme), else the map-wide track, else null (the biome rule applies).
+ * Unknown track ids (a document from a future build) fall through safely.
+ */
+export function mapMusicZoneAt(x: number, z: number): MusicZone | null {
+  const music = getActiveWorldContent().music;
+  if (!music) return null;
+  let best: MusicZone | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  if (music.areas) {
+    for (const a of music.areas) {
+      if (x < a.minX || x > a.maxX || z < a.minZ || z > a.maxZ) continue;
+      if (!isMusicZone(a.track)) continue;
+      const size = (a.maxX - a.minX) * (a.maxZ - a.minZ);
+      if (size < bestArea) {
+        bestArea = size;
+        best = a.track;
+      }
+    }
+  }
+  if (best) return best;
+  return music.zoneTrack && isMusicZone(music.zoneTrack) ? music.zoneTrack : null;
+}
 
 const TOWN_MUSIC: Record<string, MusicZone> = {
   eastbrook_vale: 'town_eastbrook',

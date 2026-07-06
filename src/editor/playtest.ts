@@ -10,6 +10,12 @@ import type { WorldContent } from '../sim/types';
 // match what the editor previews for the built-in terrain.
 export const DEFAULT_PLAYTEST_SEED = 20061;
 
+// sessionStorage key holding the meta.id of the map that launched the last
+// playtest in this tab. The editor writes it on launch (after a full local
+// save) and reads it on boot, so the game's "Back to Editor" button lands on
+// the same map instead of a blank document.
+export const PLAYTEST_RESUME_KEY = 'woc_editor_playtest_resume';
+
 export interface PlaytestOptions {
   seed: number;
   playerClass: string;

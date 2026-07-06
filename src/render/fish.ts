@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { DUNGEON_X_THRESHOLD, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z } from '../sim/data';
+import {
+  DUNGEON_X_THRESHOLD,
+  getActiveWorldContent,
+  WORLD_MAX_X,
+  WORLD_MAX_Z,
+  WORLD_MIN_Z,
+} from '../sim/data';
 import { terrainHeight, waterLevel } from '../sim/world';
 import { GFX } from './gfx';
 
@@ -115,6 +121,9 @@ const scratch = new THREE.Vector3();
 export function buildFish(seed: number): FishView {
   const group = new THREE.Group();
   group.name = 'fish';
+  if (getActiveWorldContent().presentationMode === 'blank') {
+    return { group, update(): void {} };
+  }
   const rng = mulberry32(seed ^ 0x515f1577);
   const count = GFX.standardMaterials ? 12 : 5;
 

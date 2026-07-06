@@ -995,6 +995,7 @@ export class Sim {
     }
 
     // Dungeon entrances + their private instance slots
+    const blankSlate = this.cfg.world?.presentationMode === 'blank';
     for (const dungeon of DUNGEON_LIST) {
       if (dungeon.overworldDoor === false) {
         for (let i = 0; i < INSTANCE_SLOT_COUNT; i++) {
@@ -1010,18 +1011,20 @@ export class Sim {
         }
         continue;
       }
-      const doorName = dungeon.id === 'nythraxis_crypt' ? 'Abandoned Crypt' : dungeon.name;
-      const door = createGroundObject(
-        this.nextId++,
-        '',
-        doorName,
-        this.groundPos(dungeon.doorPos.x, dungeon.doorPos.z),
-      );
-      door.templateId = 'dungeon_door';
-      door.dungeonId = dungeon.id;
-      door.objectItemId = null;
-      door.lootable = true; // interactable
-      this.addEntity(door);
+      if (!blankSlate) {
+        const doorName = dungeon.id === 'nythraxis_crypt' ? 'Abandoned Crypt' : dungeon.name;
+        const door = createGroundObject(
+          this.nextId++,
+          '',
+          doorName,
+          this.groundPos(dungeon.doorPos.x, dungeon.doorPos.z),
+        );
+        door.templateId = 'dungeon_door';
+        door.dungeonId = dungeon.id;
+        door.objectItemId = null;
+        door.lootable = true; // interactable
+        this.addEntity(door);
+      }
       for (let i = 0; i < INSTANCE_SLOT_COUNT; i++) {
         this.instances.push({
           dungeonId: dungeon.id,

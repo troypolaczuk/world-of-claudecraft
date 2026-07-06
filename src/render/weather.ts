@@ -18,7 +18,16 @@ const HX = 70;
 const HY = 46;
 const HZ = 70;
 
-type Precip = 'snow' | 'rain';
+type Precip = 'snow' | 'rain' | 'sparkle';
+
+/** Editor/map override: a fixed weather look ('auto' keeps the biome rule). */
+export type WeatherMode = 'auto' | 'clear' | 'rain' | 'snow' | 'sparkle';
+
+export interface WeatherOverride {
+  mode: WeatherMode;
+  /** Precipitation strength multiplier 0..1 (scales opacity + density read). */
+  intensity: number;
+}
 
 interface PrecipStyle {
   color: number;
@@ -27,7 +36,10 @@ interface PrecipStyle {
   fallVar: number; // per-particle fall-speed spread
   sway: number; // horizontal sway amplitude (snow); slant drift (rain)
   target: number; // steady-state opacity for this look
-  texture: 'flake' | 'streak';
+  texture: 'flake' | 'streak' | 'spark';
+  blending: THREE.Blending;
+  /** Global opacity shimmer (sparkles twinkle; 0 = steady). */
+  twinkle: number;
 }
 
 const STYLES: Record<Precip, PrecipStyle> = {
@@ -36,10 +48,44 @@ const STYLES: Record<Precip, PrecipStyle> = {
   // approaching a yard stays huge on screen even far off and looks like flying
   // snowballs. Kept just above the ambient motes (0.5) so it still registers
   // against bright snowfields.
-  snow: { color: 0xffffff, size: 0.45, fall: 6.5, fallVar: 2.5, sway: 1.6, target: 0.95, texture: 'flake' },
+  snow: {
+    color: 0xffffff,
+    size: 0.45,
+    fall: 6.5,
+    fallVar: 2.5,
+    sway: 1.6,
+    target: 0.95,
+    texture: 'flake',
+    blending: THREE.NormalBlending,
+    twinkle: 0,
+  },
   // fast, near-vertical streaks with a faint cool tint; a touch taller than a
   // flake so the streak still reads, but nowhere near the old yard-long drops.
-  rain: { color: 0x9fc4e0, size: 0.6, fall: 52, fallVar: 14, sway: 0.5, target: 0.7, texture: 'streak' },
+  rain: {
+    color: 0x9fc4e0,
+    size: 0.6,
+    fall: 52,
+    fallVar: 14,
+    sway: 0.5,
+    target: 0.7,
+    texture: 'streak',
+    blending: THREE.NormalBlending,
+    twinkle: 0,
+  },
+  // golden sparkles: slow-sinking motes of light, additive so they read as
+  // glow (and cross the bloom threshold on composer tiers), with a gentle
+  // global twinkle.
+  sparkle: {
+    color: 0xffd876,
+    size: 0.38,
+    fall: 1.7,
+    fallVar: 1.1,
+    sway: 1.1,
+    target: 0.85,
+    texture: 'spark',
+    blending: THREE.AdditiveBlending,
+    twinkle: 0.35,
+  },
 };
 
 // Tiny deterministic RNG (mulberry32) so particle seeding never reaches for
@@ -97,6 +143,38 @@ function streakTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+// A four-point star with a hot core: the golden-sparkle mote.
+function sparkTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.5)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  // Cross rays.
+  const ray = ctx.createLinearGradient(0, 30, 0, 34);
+  ray.addColorStop(0, 'rgba(255,255,255,0)');
+  ray.addColorStop(0.5, 'rgba(255,255,255,0.9)');
+  ray.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = ray;
+  ctx.fillRect(4, 30, 56, 4);
+  ctx.save();
+  ctx.translate(32, 32);
+  ctx.rotate(Math.PI / 2);
+  ctx.translate(-32, -32);
+  ctx.fillRect(4, 30, 56, 4);
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+
 export class Weather {
   private points: THREE.Points;
   private material: THREE.PointsMaterial;
@@ -104,12 +182,18 @@ export class Weather {
   private fallSpeed: Float32Array; // per-particle fall speed
   private phase: Float32Array; // per-particle sway phase
   private readonly count: number;
-  private readonly textures: { flake: THREE.CanvasTexture; streak: THREE.CanvasTexture };
+  private readonly textures: {
+    flake: THREE.CanvasTexture;
+    streak: THREE.CanvasTexture;
+    spark: THREE.CanvasTexture;
+  };
 
   private mode: Precip = 'snow';
   private intensity = 0; // current eased opacity 0..1
   private enabled = true;
   private time = 0;
+  // Map/editor override: null follows the biome (the shipped behavior).
+  private override: WeatherOverride | null = null;
 
   constructor(scene: THREE.Scene, lowGfx: boolean) {
     // a smaller pool on the low tier keeps the effect affordable there
@@ -133,7 +217,7 @@ export class Weather {
     // frame, so a fixed large radius avoids per-frame recompute and culling.
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Math.hypot(HX, HY, HZ));
 
-    this.textures = { flake: flakeTexture(), streak: streakTexture() };
+    this.textures = { flake: flakeTexture(), streak: streakTexture(), spark: sparkTexture() };
     this.material = new THREE.PointsMaterial({
       size: STYLES.snow.size,
       map: this.textures.flake,
@@ -156,11 +240,17 @@ export class Weather {
     this.enabled = on;
   }
 
+  /** Map/editor weather override; null (or mode 'auto') restores biome rule. */
+  setOverride(override: WeatherOverride | null): void {
+    this.override = override && override.mode !== 'auto' ? { ...override } : null;
+  }
+
   private applyStyle(mode: Precip): void {
     const s = STYLES[mode];
     this.material.map = this.textures[s.texture];
     this.material.color.setHex(s.color);
     this.material.size = s.size;
+    this.material.blending = s.blending;
     this.material.needsUpdate = true;
   }
 
@@ -171,9 +261,19 @@ export class Weather {
    *              (indoors / underwater / suppressed)
    */
   update(cam: THREE.Vector3, dt: number, biome: BiomeId | null): void {
-    // peaks -> snow, marsh -> rain, everything else clears
-    const want: Precip | null =
-      !this.enabled || biome === null ? null : biome === 'peaks' ? 'snow' : biome === 'marsh' ? 'rain' : null;
+    // The map override wins; otherwise peaks -> snow, marsh -> rain, clear else.
+    // Indoors/underwater (biome null) always clears, override or not.
+    let want: Precip | null;
+    let strength = 1;
+    if (!this.enabled || biome === null) {
+      want = null;
+    } else if (this.override) {
+      want = this.override.mode === 'clear' ? null : (this.override.mode as Precip);
+      strength = Math.max(0, Math.min(1, this.override.intensity));
+      if (strength <= 0.01) want = null;
+    } else {
+      want = biome === 'peaks' ? 'snow' : biome === 'marsh' ? 'rain' : null;
+    }
 
     // While the visible type still differs from what we want, drive opacity to
     // zero first; once faded out, swap the material and let it climb again.
@@ -187,12 +287,17 @@ export class Weather {
         this.applyStyle(want);
       }
     } else {
-      target = STYLES[this.mode].target;
+      target = STYLES[this.mode].target * strength;
     }
 
     const k = 1 - Math.exp(-dt * 1.8);
     this.intensity += (target - this.intensity) * k;
-    this.material.opacity = this.intensity;
+    const s0 = STYLES[this.mode];
+    // Sparkles twinkle: a soft global shimmer on top of the eased intensity.
+    this.material.opacity =
+      s0.twinkle > 0
+        ? this.intensity * (1 - s0.twinkle * 0.5 + s0.twinkle * 0.5 * Math.sin(this.time * 2.6))
+        : this.intensity;
 
     const live = this.intensity > 0.01;
     this.points.visible = live;
@@ -209,12 +314,15 @@ export class Weather {
       pos[j] += Math.sin(this.time * 0.8 + this.phase[i]) * s.sway * dt;
 
       // wrap each axis into the camera-relative box so the field is endless
-      let rx = pos[j] - cam.x;
-      if (rx > HX) pos[j] -= HX * 2; else if (rx < -HX) pos[j] += HX * 2;
-      let rz = pos[j + 2] - cam.z;
-      if (rz > HZ) pos[j + 2] -= HZ * 2; else if (rz < -HZ) pos[j + 2] += HZ * 2;
+      const rx = pos[j] - cam.x;
+      if (rx > HX) pos[j] -= HX * 2;
+      else if (rx < -HX) pos[j] += HX * 2;
+      const rz = pos[j + 2] - cam.z;
+      if (rz > HZ) pos[j + 2] -= HZ * 2;
+      else if (rz < -HZ) pos[j + 2] += HZ * 2;
       const ry = pos[j + 1] - cam.y;
-      if (ry < -HY) pos[j + 1] += HY * 2; // fell out the bottom -> back to the top
+      if (ry < -HY)
+        pos[j + 1] += HY * 2; // fell out the bottom -> back to the top
       else if (ry > HY) pos[j + 1] -= HY * 2;
     }
     (this.points.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;

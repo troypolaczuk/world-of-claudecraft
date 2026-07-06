@@ -1765,6 +1765,38 @@ export interface PlacedAsset {
   scale: number;
   // Circle collider radius in yards (already scaled), or absent/0 for walk-through.
   collideRadius?: number;
+  // Footprint shape: absent = circle, 'square' = rotY-following OBB with
+  // half-extents = collideRadius (see sim/colliders.ts).
+  collideShape?: 'square';
+  // Optional extra transform axes (the editor gizmo): visual-only tilts and
+  // per-axis scale multipliers on top of the uniform scale. Absent = 0 / 1.
+  rotX?: number;
+  rotZ?: number;
+  scaleX?: number;
+  scaleY?: number;
+  scaleZ?: number;
+  // Vertical offset above the terrain seat (yards). Absent = 0.
+  y?: number;
+  // Editor detach (see MapPlacement.detached): when true the model floats at a
+  // fixed height — `groundY` is the frozen ground it seats above instead of the
+  // live terrainHeight, with `y` still added on top. Absent = terrain-seated.
+  detached?: boolean;
+  groundY?: number;
+  // Grass hue override in degrees [0, 360] for procedural grass patches
+  // (path 'procedural://grass-patch'); absent = the default grass tint.
+  hue?: number;
+  // Grass blade lightness [0, 1] and tufts per patch [1, 60]; absent = defaults.
+  lum?: number;
+  clump?: number;
+  // Material overrides (shader tweaks): albedo tint multiply, transparency,
+  // emissive glow color + strength. Absent = the model's own materials.
+  tint?: number;
+  opacity?: number;
+  glow?: number;
+  glowStrength?: number;
+  // Animated fire effect anchored at the model's top (render-only): a live
+  // flame + a boot-time point light in playtest. Absent = none.
+  fire?: boolean;
 }
 
 // An invisible blocker wall (editor-authored, custom maps only): a world-space
@@ -1778,6 +1810,26 @@ export interface BlockerDef {
   z2: number;
 }
 
+// An editor-authored collision volume (custom maps only), resolved from a
+// 'collider/<kind>' placement by sim/collider_volumes.ts. Dimensions are FINAL
+// world-space yards (placement scale already applied). Boxes and spheres become
+// static movement colliders; planes raise the walkable floor (groundHeight)
+// over their footprint. Like blockers, there is NO render mesh in the shipped
+// game; the editor draws a translucent overlay instead.
+export interface ColliderVolume {
+  kind: 'box' | 'sphere' | 'plane' | 'wall';
+  x: number;
+  z: number;
+  rotY: number; // three.js rotation.y convention (matches ObbCollider.rot)
+  // Plane tilt (radians, three.js Euler 'XYZ' with rotY): a tilted plane is a
+  // sloped walkable floor (ramp). Absent/0 for boxes and spheres (yaw-only OBBs).
+  rotX?: number;
+  rotZ?: number;
+  sizeX: number; // box width / sphere diameter / plane width
+  sizeY: number; // box height / plane floor offset above the terrain at center
+  sizeZ: number; // box depth / plane depth
+}
+
 // A coarse 2D biome paint grid (editor). Each cell holds a biome id (0=vale,
 // 1=marsh, 2=peaks) or 255 for unpainted. Where painted, it overrides both the
 // terrain SHAPE (sim, in shapeAt) and the ground COLOR (render). Absent for the
@@ -1789,6 +1841,61 @@ export interface BiomePaint {
   originX: number; // world x of the grid's (col 0) edge
   originZ: number; // world z of the grid's (row 0) edge
   ids: number[]; // length cols*rows; 0/1/2 = biome, 255 = unpainted
+  // Maker-defined color swatches (editor palette additions): cells painted with
+  // a custom id (see CUSTOM_PAINT_ID_MIN in sim/map_doc.ts) tint the ground
+  // that color; terrain SHAPE keeps the zone band (color-only painting).
+  custom?: CustomPaintSwatch[];
+}
+
+export interface CustomPaintSwatch {
+  id: number; // CUSTOM_PAINT_ID_MIN..CUSTOM_PAINT_ID_MAX, unique per map
+  color: number; // 0xRRGGBB (also the fallback when the texture is unavailable)
+  label?: string;
+  // Content hash of an imported ground texture (stored browser-side in
+  // IndexedDB); when present, painting with this swatch tiles the image over
+  // the ground. A machine without the texture falls back to the color.
+  textureSha?: string;
+  // Yards per texture repeat (default 8).
+  tileSize?: number;
+}
+
+// Map-authored music (game-client presentation only). Track ids are the
+// game's MusicZone names (game/music.ts); unknown ids are ignored at play
+// time so documents stay forward-compatible.
+export interface MapMusic {
+  // Map-wide soundtrack; absent = derived from the biome as usual.
+  zoneTrack?: string;
+  // Rect areas with their own track; the smallest containing rect wins.
+  areas?: { minX: number; minZ: number; maxX: number; maxZ: number; track: string }[];
+}
+
+// Map-authored ambient weather (render-only, presentation-only). Absent = the
+// shipped biome rule (snow in the peaks, rain in the marsh).
+export interface MapWeather {
+  // Fixed weather; 'auto' keeps the biome rule. A non-empty schedule wins.
+  mode?: 'auto' | 'clear' | 'rain' | 'snow' | 'sparkle';
+  // Precipitation strength 0..1 (default 1).
+  intensity?: number;
+  // Billboard cloud deck: coverage 0..1, puff height in yards above sea level.
+  // Authored low it hugs the terrain and reads as rolling ground fog.
+  clouds?: { coverage: number; height: number };
+  // Dynamic weather: cycle these in order, each holding for `minutes`.
+  schedule?: { mode: 'clear' | 'rain' | 'snow' | 'sparkle'; minutes: number }[];
+}
+
+// Automatic terrain texturing rules (render-only). Every rule defaults ON
+// (absent = the shipped look); the map editor exposes them as per-map toggles
+// so makers can paint cliffs and peaks themselves. Painted ground always wins
+// over the enabled rules regardless.
+export interface TerrainStyle {
+  // Rock texture creeping over steep slopes.
+  slopeRock?: boolean;
+  // High ground turning rocky then snow-capped.
+  snowCaps?: boolean;
+  // The world-rim "distant sunlit peaks" haze + rock band.
+  rimMountains?: boolean;
+  // Sand feathering in near the waterline (digging below it goes sandy).
+  shoreSand?: boolean;
 }
 
 // A swappable world definition: the spatial + content data the terrain function
@@ -1815,11 +1922,45 @@ export interface WorldContent {
   // Invisible blocker walls (editor). Collision-only OBBs in the sim's static
   // colliders; never rendered. Absent for the built-in world.
   blockers?: BlockerDef[];
+  // Editor-authored collision volumes (box/sphere block movement, plane raises
+  // the floor); never rendered in playtest. Absent for the built-in world.
+  colliderVolumes?: ColliderVolume[];
   // 2D biome paint overriding terrain shape (sim) and color (render).
   biomePaint?: BiomePaint;
+  // Auto-texturing rule toggles (render-only; absent = all rules on).
+  terrainStyle?: TerrainStyle;
+  // Ambience animation speed (render-only): scales cosmetic world motion
+  // (water, foliage sway, fire, birds, weather). 1 = shipped speed. Never
+  // touches the sim tick or any gameplay timing.
+  timeScale?: number;
+  // Placed-asset view distance (render-only): how far free-placed decor renders
+  // before it culls, capped at the fog. Absent = the default.
+  assetViewDistance?: number;
+  // Ambient weather override (render-only; absent = the biome rule).
+  weather?: MapWeather;
+  // Authored soundtrack (client presentation; absent = the biome rule).
+  music?: MapMusic;
+  // The map's sky: 'builtin:<id>' (bundled equirect) or 'custom:<sha256>'
+  // (uploaded, IndexedDB). Absent = the procedural HDRI sky. Render-only.
+  skybox?: string;
+  // Named location rects (editor-authored): the HUD shows the containing
+  // rect's name as the player's current location.
+  locations?: { name: string; minX: number; minZ: number; maxX: number; maxZ: number }[];
+  // Editor-authored point lights (render-only; y is height above terrain).
+  lights?: { x: number; z: number; y: number; color: number; intensity: number; range: number }[];
   // Water surface height for this map; absent = the built-in WATER_LEVEL (-4.5).
   // Read through waterLevel() in src/sim/world.ts, never directly.
   waterLevel?: number;
+  // Half the world's x extent in yards (world spans [-worldHalfX, worldHalfX]);
+  // absent = the built-in WORLD_MAX_X. Drives the terrain rim walls and the
+  // decoration field bounds; the z extent comes from the zone bands.
+  worldHalfX?: number;
+  // Procedural terrain decorations (trees/rocks) are enabled by default. The
+  // map editor's blank-flat template opts out so makers start from bare ground.
+  decorationsMode?: 'empty';
+  // Render/sim presentation defaults are enabled by default. 'blank' keeps only
+  // the neutral terrain base and sky birds for new flat authoring worlds.
+  presentationMode?: 'blank';
 }
 
 export interface SimConfig {

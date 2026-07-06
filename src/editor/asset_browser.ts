@@ -10,6 +10,8 @@ import { ASSET_CATALOG, ASSET_CATEGORIES } from './asset_catalog.generated';
 import { cachedAssetThumb, requestAssetThumb } from './asset_thumbs';
 import { hashHue } from './asset_thumbs_core';
 import { el } from './dom';
+import { LOCAL_ASSET_PREFIX, listLocalAssets, removeLocalAsset } from './local_assets';
+import { deleteStoredLocalAsset } from './local_assets_db';
 import { deleteUserAsset, EditorApiError, listMyAssets, signedIn } from './net';
 import { editorErrorKey } from './server_errors_core';
 import {
@@ -21,11 +23,19 @@ import {
 } from './user_assets';
 
 const UPLOADED_TAB = 'uploaded';
-const MAX_GRID_ITEMS = 220;
+const IMPORTED_TAB = 'imported';
+// Drawer height: user-resizable by dragging the top edge, persisted per browser.
+const HEIGHT_PREF_KEY = 'woc_editor_assets_height';
+const MIN_DRAWER_H = 140;
+const DRAWER_MAX_VH = 0.72;
+// Big enough that NO catalog category ever truncates (largest is dungeon at
+// ~379): every asset, characters included, must be reachable in its tab.
+// Thumbnails stay lazy, so cells beyond the viewport cost almost nothing.
+const MAX_GRID_ITEMS = 1000;
 const SEARCH_DEBOUNCE_MS = 120;
 // Cached thumbnails are ~15 KB canvases; cap the cache so a long session
 // browsing the whole catalog cannot pin unbounded canvas memory.
-const THUMB_CACHE_CAP = 600;
+const THUMB_CACHE_CAP = 1000;
 
 // Per-category counts are static for the generated catalog: compute once at
 // module init instead of an ASSET_CATALOG.filter per category per tab render.
@@ -48,6 +58,8 @@ interface Entry {
   /** Server row id for uploaded assets owned by this account (delete handle). */
   uploadId?: number;
   sha256?: string;
+  /** Locally imported model (delete = drop the session blob, no server). */
+  local?: boolean;
 }
 
 const CATEGORY_KEYS: Record<string, string> = {
@@ -109,6 +121,7 @@ export class AssetBrowser {
   private uploadedLoading = false;
   private searchTimer = 0;
   private readonly thumbCache = new Map<string, HTMLCanvasElement>();
+  private thumbObserver: IntersectionObserver | null = null;
   // Ids the grid currently shows: the cheap stale-skip probe for queued 3D
   // snapshots (rebuilt on every renderGrid, so search/tab churn drops work).
   private gridIds: ReadonlySet<string> = new Set();
@@ -120,6 +133,13 @@ export class AssetBrowser {
     this.root = el('section', 'ed-assets');
     this.root.setAttribute('aria-label', t('editor.assets.label'));
     this.root.style.display = 'none';
+    try {
+      const saved = Number(localStorage.getItem(HEIGHT_PREF_KEY));
+      if (Number.isFinite(saved) && saved >= MIN_DRAWER_H) this.root.style.height = `${saved}px`;
+    } catch {
+      // Blocked storage: keep the stylesheet default.
+    }
+    this.buildResizeGrip();
 
     const head = el('div', 'ed-assets-head');
     head.appendChild(el('h2', 'ed-assets-title', t('editor.assets.title')));
@@ -156,6 +176,46 @@ export class AssetBrowser {
     if (on && this.category === UPLOADED_TAB) void this.loadUploaded();
   }
 
+  /** Drag strip along the drawer's top edge: pull up/down to resize, height
+   *  persisted per browser. Pointer capture keeps the drag alive off-strip. */
+  private buildResizeGrip(): void {
+    const grip = el('div', 'ed-assets-resize');
+    grip.setAttribute('role', 'separator');
+    grip.setAttribute('aria-orientation', 'horizontal');
+    grip.setAttribute('aria-label', t('editor.assets.resizeHandle'));
+    grip.title = t('editor.assets.resizeHandle');
+    let startY = 0;
+    let startH = 0;
+    const move = (ev: PointerEvent): void => {
+      const max = Math.round(window.innerHeight * DRAWER_MAX_VH);
+      const h = Math.min(max, Math.max(MIN_DRAWER_H, startH + (startY - ev.clientY)));
+      this.root.style.height = `${h}px`;
+    };
+    grip.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      startY = ev.clientY;
+      startH = this.root.getBoundingClientRect().height;
+      this.root.classList.add('resizing');
+      grip.setPointerCapture(ev.pointerId);
+      grip.addEventListener('pointermove', move);
+      const end = (): void => {
+        grip.removeEventListener('pointermove', move);
+        this.root.classList.remove('resizing');
+        try {
+          localStorage.setItem(
+            HEIGHT_PREF_KEY,
+            String(Math.round(this.root.getBoundingClientRect().height)),
+          );
+        } catch {
+          // Blocked storage: the size still applies for this session.
+        }
+      };
+      grip.addEventListener('pointerup', end, { once: true });
+      grip.addEventListener('pointercancel', end, { once: true });
+    });
+    this.root.appendChild(grip);
+  }
+
   get selectedAssetId(): string | null {
     return this.selectedId;
   }
@@ -164,6 +224,14 @@ export class AssetBrowser {
   showUploaded(assetId: string): void {
     this.category = UPLOADED_TAB;
     this.uploadedLoaded = true; // the registry was just updated by the caller
+    this.selectedId = assetId;
+    this.renderTabs();
+    this.renderGrid();
+  }
+
+  /** Jump the browser to a freshly imported local model (post-import flow). */
+  showImported(assetId: string): void {
+    this.category = IMPORTED_TAB;
     this.selectedId = assetId;
     this.renderTabs();
     this.renderGrid();
@@ -179,6 +247,7 @@ export class AssetBrowser {
       }),
     }));
     cats.push({ id: UPLOADED_TAB, label: t('editor.assets.uploadedTab') });
+    cats.push({ id: IMPORTED_TAB, label: t('editor.assets.importedTab') });
     for (const c of cats) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -227,6 +296,14 @@ export class AssetBrowser {
         sha256: a.sha256,
       }));
     }
+    if (this.category === IMPORTED_TAB) {
+      return listLocalAssets().map((a) => ({
+        id: a.id,
+        label: a.name,
+        category: t('editor.assets.importedTab'),
+        local: true,
+      }));
+    }
     return ASSET_CATALOG.filter((a) => a.category === this.category).map((a) => ({
       id: a.id,
       label: a.label,
@@ -259,11 +336,33 @@ export class AssetBrowser {
       this.note.textContent =
         this.category === UPLOADED_TAB && !q
           ? t('editor.assets.uploadedEmpty')
-          : t('editor.assets.empty');
+          : this.category === IMPORTED_TAB && !q
+            ? t('editor.assets.importedEmpty')
+            : t('editor.assets.empty');
       this.note.style.display = '';
       return;
     }
     for (const entry of items) this.grid.appendChild(this.cell(entry));
+  }
+
+  /** Lazily created IntersectionObserver: fires each cell's queued thumbnail
+   *  request the first time it becomes visible, then forgets the cell. */
+  private visibleThumbs(): IntersectionObserver {
+    if (!this.thumbObserver) {
+      this.thumbObserver = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const el = e.target as HTMLElement & { __wocThumb?: () => void };
+            this.thumbObserver?.unobserve(el);
+            el.__wocThumb?.();
+            el.__wocThumb = undefined;
+          }
+        },
+        { root: this.grid.parentElement, rootMargin: '200px' },
+      );
+    }
+    return this.thumbObserver;
   }
 
   /** Thumbnail canvases are deterministic per asset id: cache and reuse them. */
@@ -287,21 +386,26 @@ export class AssetBrowser {
     b.setAttribute('aria-label', t('editor.assets.pick', { name: entry.label }));
     // Paint instantly: the cached 3D snapshot when one exists, else the
     // procedural placeholder while the real preview renders in the background.
+    // Real snapshots are requested ONLY once the cell scrolls into view: a
+    // 379-item tab must not queue 379 GLB loads the moment it opens.
     const snapshot = cachedAssetThumb(entry.id);
     const thumb = snapshot ?? this.thumbFor(entry);
     b.appendChild(thumb);
     if (!snapshot) {
-      requestAssetThumb(
-        entry.id,
-        () => this.gridIds.has(entry.id),
-        (real) => {
-          // Swap only if this very cell still shows the id (the grid may have
-          // re-rendered for a search or tab change while the GLB loaded).
-          if (!thumb.isConnected || !this.gridIds.has(entry.id)) return;
-          thumb.replaceWith(real);
-          this.thumbCache.delete(entry.id); // the placeholder is obsolete now
-        },
-      );
+      this.visibleThumbs().observe(b);
+      (b as HTMLElement & { __wocThumb?: () => void }).__wocThumb = () => {
+        requestAssetThumb(
+          entry.id,
+          () => this.gridIds.has(entry.id),
+          (real) => {
+            // Swap only if this very cell still shows the id (the grid may have
+            // re-rendered for a search or tab change while the GLB loaded).
+            if (!thumb.isConnected || !this.gridIds.has(entry.id)) return;
+            thumb.replaceWith(real);
+            this.thumbCache.delete(entry.id); // the placeholder is obsolete now
+          },
+        );
+      };
     }
     b.appendChild(el('span', 'ed-asset-label', entry.label));
     b.addEventListener('click', () => {
@@ -313,6 +417,24 @@ export class AssetBrowser {
       this.deps.onPick(entry.id, entry.label);
     });
     wrap.appendChild(b);
+    if (entry.local) {
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'ed-asset-del';
+      del.textContent = 'x';
+      del.title = t('editor.assets.removeImported');
+      del.setAttribute('aria-label', t('editor.assets.removeImported'));
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const url = removeLocalAsset(entry.id);
+        if (url) URL.revokeObjectURL(url);
+        void deleteStoredLocalAsset(entry.id.slice(LOCAL_ASSET_PREFIX.length));
+        if (this.selectedId === entry.id) this.selectedId = null;
+        this.renderGrid();
+      });
+      wrap.appendChild(del);
+      return wrap;
+    }
     if (entry.uploadId !== undefined && entry.sha256) {
       const uploadId = entry.uploadId;
       const sha = entry.sha256;

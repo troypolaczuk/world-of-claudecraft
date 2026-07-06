@@ -13,8 +13,12 @@ export const editorStrings = {
   // Browser tab title. Hyphen separator (not a dash character).
   docTitle: 'Map Editor - World of ClaudeCraft',
   untitledMap: 'Untitled Map',
+  flatMapName: 'Flat World',
   // The offline character name a playtest boots with.
   playtestPlayerName: 'Mapmaker',
+  // The corner button shown in-game during a playtest (game/editor_playtest.ts).
+  playtestBack: 'Back to Editor',
+  playtestBackTitle: 'Return to the map editor (your map was saved when the playtest launched)',
 
   topbar: {
     label: 'Editor actions',
@@ -28,6 +32,8 @@ export const editorStrings = {
     neverSaved: 'Not saved yet',
     new: 'New',
     newTitle: 'Start a new map from the built-in world',
+    newFlat: 'New Map',
+    newFlatTitle: 'Start a blank flat map with a size you choose',
     open: 'Open',
     openTitle: 'Open a saved map (browser or server)',
     save: 'Save',
@@ -38,12 +44,15 @@ export const editorStrings = {
     forkTitle: 'Create your own server-side copy of this map',
     forkDisabledTitle: 'Open a server map first to fork it',
     import: 'Import',
-    importTitle: 'Import a map from a JSON file',
+    importTitle: 'Import a map from a .wocmap.zip bundle (or a plain map .json)',
     export: 'Export',
-    exportTitle: 'Download this map as a JSON file',
+    exportTitle: 'Export this map and its models, textures, and skybox as a .wocmap.zip bundle',
     uploadAsset: 'Upload Asset',
     uploadAssetTitle: 'Upload a GLB model (up to 8 MiB) to place in your maps',
     uploadAssetDisabledTitle: 'Sign in from the game to upload assets',
+    importModel: 'Import Model',
+    importModelTitle:
+      'Load a .glb or .gltf model from this computer and place it, fully offline (kept for this session)',
     playtest: 'Playtest',
     playtestTitle: 'Boot the game on this map (offline, current edits included)',
     viewLabel: 'View mode',
@@ -67,28 +76,75 @@ export const editorStrings = {
     signInTitle: 'Open the game login screen in a new tab',
     help: 'Help',
     helpTitle: 'Editor guide: tools, shortcuts, and the tutorial',
+    more: 'More',
+    moreTitle: 'More actions: Save As, autosave, fork, import/export, upload',
+    settings: 'Settings',
+    settingsTitle: 'Graphics and sound settings (shared with playtest)',
+  },
+
+  settings: {
+    title: 'Settings',
+    hint: 'Graphics and sound for the editor and playtest. These are the same settings the game uses, saved in this browser.',
+    graphicsTitle: 'Graphics quality',
+    graphicsLow: 'Low',
+    graphicsMedium: 'Medium',
+    graphicsHigh: 'High',
+    graphicsUltra: 'Ultra',
+    graphicsHint: 'Applies to the next playtest, and to the editor after a reload.',
+    applyGraphics: 'Reload editor to apply',
+    soundTitle: 'Sound',
+    sfxVolume: 'Effects volume',
+    musicVolume: 'Music volume',
+    music: 'Play music',
+    close: 'Close',
   },
 
   tool: {
     listLabel: 'Editor tools',
     keyHint: '{name} ({key})',
     select: 'Select',
-    raise: 'Raise',
+    move: 'Move',
+    rotate: 'Rotate',
+    scale: 'Scale',
+    raise: 'Sculpt',
     lower: 'Lower',
     smooth: 'Smooth',
-    flatten: 'Flatten',
+    flatten: 'Flatten / Smooth',
     paint: 'Paint Biome',
     water: 'Water',
     place: 'Place Asset',
+    foliage: 'Paint Foliage',
     blocker: 'Blocker Wall',
+    collider: 'Collider',
     camp: 'Camp',
     spawn: 'Spawn Point',
+    zone: 'Zone',
+    light: 'Point Light',
+    music: 'Music',
     region: 'Region',
     erase: 'Erase',
   },
 
   inspector: {
     label: 'Tool options',
+    toolTab: 'Tools',
+    cameraTab: 'Camera',
+    lightingTab: 'Lighting',
+    sceneTab: 'Scene',
+  },
+
+  // The Blender-style Scene Collection panel: a list of every placed object with
+  // rename, focus (pin), and hide (eyeball) controls.
+  scene: {
+    title: 'Scene Collection',
+    hint: 'Every placed object. Click to select, double-click a name to rename.',
+    none: 'No objects placed yet.',
+    count: '{n} objects',
+    pinTitle: 'Focus the camera on this object and select it',
+    hideTitle: 'Hide this object in the editor (it still exists in the map)',
+    showTitle: 'Show this object again',
+    hiddenBadge: 'hidden',
+    renameLabel: 'Object name',
   },
 
   brush: {
@@ -110,14 +166,107 @@ export const editorStrings = {
     volcano: 'Volcano',
     cave: 'Cave',
     erase: 'Erase paint',
-    hint: 'Painted cells override the zone biome for terrain shape and color.',
+    hint: 'Paint changes the ground texture and color only; it never reshapes the terrain.',
+    addSwatch: 'Add',
+    swatchColor: 'New swatch color',
+    swatchNamePlaceholder: 'Swatch name (optional)',
+    customHint:
+      'Custom swatches color the ground only (terrain shape keeps the zone biome) and save with the map.',
+    customFull: 'Swatch limit reached ({max}).',
+    importTexture: 'Import texture swatch',
+    importTextureTitle:
+      'Pick an image file: painting with the new swatch tiles it over the ground (stored in this browser; other machines see its average color)',
+    tileSize: 'Texture tile size (yd)',
+    importTextureFailed: 'Could not read that image.',
     clear: 'Clear all biome paint',
     clearConfirm: 'Remove every painted biome cell from this map?',
+    hardness: 'Brush hardness',
+    bucket: 'Fill (replace texture)',
+    bucketTitle:
+      'Arm the bucket, then click the ground: every cell painted with the clicked texture switches to the selected swatch',
+    bucketArmedHint: 'Bucket armed: click the ground to replace the clicked texture map-wide.',
+    bucketDone: 'Replaced {count} painted cells.',
+    pickTexture: 'Pick the texture to paint',
+    alphaTitle: 'Brush alpha',
+    alphaNone: 'None',
+    alphaImport: 'Import alpha',
+    alphaImportTitle:
+      'Load a grayscale image as a brush mask: white paints, black masks out (kept in this browser)',
+    alphaImportFailed: 'Could not read that image as a brush alpha.',
+    alphaRemove: 'Remove this imported alpha',
+    autoTitle: 'Auto textures',
+    autoSlopeRock: 'Rock on steep slopes',
+    autoSnowCaps: 'Snow-capped peaks',
+    autoRim: 'Mountains at the map edge',
+    autoShoreSand: 'Sand near the water',
+    autoHint:
+      'Automatic texturing rules. Your paint always wins over them, and unchecking one removes it map-wide. New maps start with all of these off.',
+  },
+
+  zoneTool: {
+    title: 'Named Locations',
+    hint: 'Drag a box on the ground, then name it: standing inside shows that name as the location in playtest.',
+    namePrompt: 'Location name',
+    none: 'No named locations yet.',
+    deleteTitle: 'Remove this location',
+  },
+
+  lightTool: {
+    title: 'Point Lights',
+    hint: 'Click the ground to drop a light. Lights render in the editor and in playtest ({max} max; nearest few shine at once).',
+    none: 'No lights yet.',
+    color: 'Color',
+    intensity: 'Intensity',
+    range: 'Range (yd)',
+    height: 'Height (yd)',
+    deleteTitle: 'Remove this light',
+    capReached: 'Light limit reached ({max}).',
+    lightN: 'Light {num}',
+    selectTitle: 'Select this light in the world (bulb badge enlarges; Delete removes it)',
+  },
+
+  markerTool: {
+    title: 'AI Markers',
+    hint: 'Editor-only notes for AI quest/event generation ("quest giver here", "chest here"). Never shown in playtest.',
+    place: 'Place markers instead of moving the spawn',
+    kind: 'Marker type',
+    npc: 'NPC',
+    object: 'Interactable object',
+    none: 'No markers yet.',
+    defaultName: '{kind} {num}',
+    deleteTitle: 'Remove this marker',
+    capReached: 'Marker limit reached ({max}).',
+  },
+
+  appearance: {
+    title: 'Appearance (shader)',
+    tint: 'Tint color',
+    opacity: 'Opacity',
+    glow: 'Glow color',
+    glowStrength: 'Glow strength',
+    fire: 'Fire effect (animated flame)',
+    reset: 'Reset appearance',
+    hint: 'Renders the same in playtest: tint recolors, opacity fades (ghosts), glow adds emissive light.',
+  },
+
+  sculpt: {
+    hint: 'Drag to raise the ground; tick the box to carve downward instead.',
+    lower: 'Lower instead of raise',
+    shiftHint: 'Hold Shift while dragging to do the opposite (raise becomes lower, and back).',
+    autoTex: 'Auto texture by angle',
+    autoTexHint:
+      'Each stroke repaints the sculpted area by ground angle: one texture below the threshold, another above it (instant cliffs).',
+    autoTexAngle: 'Steep from (degrees)',
+    autoTexFlat: 'Flat ground texture',
+    autoTexSteep: 'Steep ground texture',
+    autoTexNone: 'Leave as is',
   },
 
   flatten: {
     hint: 'Flatten levels the ground to the height under the cursor when the drag starts.',
     hardEdge: 'Hard edge',
+    smoothMode: 'Smooth instead of flatten',
+    shiftHint: 'Hold Shift while dragging to swap flatten and smooth for that stroke.',
   },
 
   water: {
@@ -125,6 +274,12 @@ export const editorStrings = {
     level: 'Water level',
     hint: 'Sets the map-wide water surface height, from {min} to {max} yards.',
     reset: 'Reset to the built-in level',
+    waterfallTitle: 'Waterfalls',
+    placeWaterfall: 'Place waterfall',
+    placeWaterfallTitle: 'Arm the Place tool with an animated waterfall (click a cliff to drop it)',
+    waterfallLabel: 'Waterfall',
+    waterfallHint:
+      'An animated falling-water sheet with a foam pool. Scale it up a cliff with S or the gizmo; stretch just the height with the Y scale handle.',
   },
 
   place: {
@@ -135,6 +290,53 @@ export const editorStrings = {
     randomRotation: 'Random rotation',
     chosen: 'Placing: {name}',
     none: 'Pick an asset from the browser below, then click the ground to place it.',
+  },
+
+  collider: {
+    title: 'Collision Volumes',
+    hint: 'Pick a shape, then click the ground to drop it. Use Move, Rotate, and Scale (or the sliders below) to shape it.',
+    shapeLabel: 'Collider shape',
+    box: 'Box collider',
+    sphere: 'Sphere collider',
+    plane: 'Floor plane',
+    wall: 'Wall plane',
+    width: 'Width',
+    height: 'Height',
+    depth: 'Depth',
+    diameter: 'Diameter',
+    floorOffset: 'Floor height offset',
+    sizeHint: 'Dimensions are yards at scale 1; the Scale tool multiplies them.',
+    playtestNote:
+      'Volumes show green in the editor and are invisible in playtest: boxes and spheres block movement, floor planes raise the walkable ground.',
+    hideVolumes: 'Hide collision volumes',
+    hideVolumesHint:
+      'Hides the green volume overlays in the viewport (they still block in playtest).',
+  },
+
+  foliageTool: {
+    title: 'Foliage Brush',
+    hint: 'Drag across the ground to scatter the enabled foliage inside the brush; each stroke is one undo step. Use Erase to remove pieces.',
+    density: 'Density',
+    minScale: 'Min size',
+    maxScale: 'Max size',
+    grass: 'Grass (animated)',
+    grassHue: 'Grass hue',
+    grassLight: 'Grass lightness',
+    grassClump: 'Clump size (strands)',
+    grassPreview: 'The color new grass will paint with',
+    ferns: 'Ferns and mushrooms',
+    bushes: 'Bushes',
+    trees: 'Trees',
+    rocks: 'Rocks',
+    collide: 'New foliage blocks movement',
+    noneSelected: 'Enable at least one foliage group to paint.',
+    customTitle: 'Custom brush asset',
+    customHint:
+      'Scatter your own asset instead of the built-in sets. Pick any model from the browser below, then brush as usual.',
+    customPick: 'Pick from asset browser',
+    customChosen: 'Brushing: {name}',
+    customClear: 'Back to built-in foliage',
+    customNeedsPick: 'Open the asset browser and pick an asset for the custom brush first.',
   },
 
   blockerTool: {
@@ -177,16 +379,21 @@ export const editorStrings = {
 
   eraseTool: {
     title: 'Erase',
-    hint: 'Click a placed asset to remove it, or click sculpted ground to remove the newest stamp under the cursor.',
+    hint: 'Click or drag across placed assets to remove them. Terrain sculpting is never affected - use Undo for sculpt mistakes.',
     blockerHint: 'Clicking near a blocker wall removes that wall instead.',
   },
 
   selection: {
     title: 'Selection',
     none: 'Nothing selected. Use Select and click a placed asset.',
+    squareCollision: 'Square collision (follows rotation)',
     asset: 'Asset: {name}',
     x: 'X',
+    y: 'Y',
     z: 'Z',
+    multiCount: '{count} assets selected',
+    multiHint:
+      'Moving, Shift+D duplicate, and Delete apply to the whole selection; Shift+click adds or removes assets.',
     rotation: 'Rotation',
     scale: 'Scale',
     collide: 'Blocks movement',
@@ -202,6 +409,16 @@ export const editorStrings = {
     moveHint:
       'Move: drag the asset along the ground in the 3D view, or nudge it with the arrow keys (0.5 yd, Shift for 2 yd).',
     wheelHint: 'Shift+scroll rotates the asset, Alt+scroll scales it, Ctrl+D duplicates it.',
+  },
+
+  transform: {
+    moveHint:
+      'Drag a gizmo arrow to move along that axis, or the yellow square to move freely. Arrow keys nudge.',
+    rotateHint:
+      'Drag a gizmo ring to rotate around that axis. Shift+scroll also rotates in 15 degree steps.',
+    scaleHint:
+      'Drag a gizmo axis handle to stretch that axis, or the yellow center cube to scale uniformly.',
+    pickHint: 'Click an asset to select it; the gizmo appears on the selection.',
   },
 
   marker: {
@@ -244,6 +461,10 @@ export const editorStrings = {
     searchPlaceholder: 'Search assets...',
     empty: 'No matching assets.',
     uploadedTab: 'Uploaded',
+    importedTab: 'Imported',
+    importedEmpty:
+      'No imported models this session. Use Import Model to load a .glb or .gltf from this computer.',
+    removeImported: 'Remove imported model (this session only)',
     uploadedEmpty: 'No uploaded assets yet. Use Upload Asset to add a GLB model (up to 8 MiB).',
     uploadedSignIn: 'Sign in from the game to upload and place your own GLB models.',
     uploadedLoadFailed: 'Could not load your uploaded assets.',
@@ -251,6 +472,7 @@ export const editorStrings = {
     deleteAssetConfirm: 'Delete the uploaded asset "{name}"? Maps that use it lose the model.',
     pick: 'Place {name}',
     categoryTab: '{category} ({count})',
+    resizeHandle: 'Drag to resize the asset browser',
     category: {
       biome: 'Biome',
       chars: 'Characters',
@@ -263,6 +485,13 @@ export const editorStrings = {
       tools: 'Tools',
       weapons: 'Weapons',
     },
+  },
+
+  importModel: {
+    notModel: 'Pick a .glb or .gltf file.',
+    tooLarge: 'That file is over the 64 MiB import limit.',
+    imported: 'Imported "{name}". It is kept for this session; re-import it after a reload.',
+    failed: 'Could not read that model file.',
   },
 
   upload: {
@@ -311,9 +540,14 @@ export const editorStrings = {
     saveFailedLocal: 'Local save failed (storage blocked).',
     opened: 'Opened "{name}".',
     imported: 'Imported "{name}".',
-    importFailed: 'Import cancelled, or the file is not a valid map.',
+    importFailed: 'That file is not a valid map. If you exported a bundle, import the .wocmap.zip.',
+    importMissingDeps:
+      '{count} model/texture/skybox file(s) are missing, so parts of the map are blank. Re-import the .wocmap.zip bundle to include them.',
     exported: 'Downloaded "{name}".',
+    bundleExported:
+      'Exported "{name}" with its models, textures, and skybox. Import the .wocmap.zip (not a loose .json) on the other computer.',
     newMap: 'New map started from the built-in world.',
+    newFlatMap: 'Blank map started.',
     forked: 'Forked to "{name}". You are editing your own copy now.',
     published: 'Map published. Anyone can now find and fork it.',
     unpublished: 'Map unpublished.',
@@ -349,6 +583,18 @@ export const editorStrings = {
     nameLabel: 'New map name',
   },
 
+  newMap: {
+    title: 'New Map',
+    hint: 'Pick a preset or set the size in yards. The map is bounded: terrain rim walls and invisible perimeter blockers keep playtest inside it.',
+    width: 'Width (yards)',
+    height: 'Height (yards)',
+    scale: 'Scale multiplier',
+    interior: 'Interior (60 x 60)',
+    zone: 'Zone (240 x 360)',
+    openWorld: 'Open World (360 x 1080)',
+    create: 'Create',
+  },
+
   // Server error codes ({error: 'snake_case'}) mapped client-side to these keys.
   serverError: {
     invalid_map_name:
@@ -374,8 +620,131 @@ export const editorStrings = {
     unknown: 'Something went wrong talking to the server.',
   },
 
+  lighting: {
+    title: 'Lighting',
+    presetLabel: 'Lighting preset',
+    day: 'Day',
+    overcast: 'Overcast',
+    dusk: 'Dusk',
+    night: 'Night',
+    customHint: 'Custom lighting (edited from a preset).',
+    sun: 'Sun intensity',
+    ambient: 'Ambient intensity',
+    environment: 'Sky ambience',
+    azimuth: 'Sun direction',
+    elevation: 'Sun height',
+    sunColor: 'Sun color',
+    skyColor: 'Sky tint',
+    hint: 'Editor preview only: playtest keeps the standard game lighting.',
+    skyboxTitle: 'Skybox',
+    skyboxDefault: 'Default sky',
+    // Bundled equirect skies (public/skybox/).
+    skybox_toon_day: 'Toon Blue Sky',
+    skyboxUpload: 'Upload skybox...',
+    skyboxCustomActive: 'Custom skybox active.',
+    skyboxHint:
+      'Pick a bundled sky or upload a panoramic (equirectangular) image. Saved with the map - playtest shows it in-game.',
+    skyboxImported: 'Skybox imported.',
+    skyboxImportFailed: 'Could not import that image.',
+    skyboxTooLarge: 'Skybox image is too large (max 24 MB).',
+    skyboxMissing: 'That skybox is not stored in this browser anymore.',
+    birdsTitle: 'Birds',
+    birds: 'Birds in the sky',
+    birdCount: 'How many',
+    birdFormation: 'Fly in V formation',
+    worldSpeedTitle: 'World Speed',
+    worldSpeed: 'Animation speed',
+    worldSpeedHint:
+      'Speeds up or slows every ambient motion (water, fire, foliage sway, birds, weather). Cosmetic only; it never changes playtest gameplay or timing.',
+    worldSpeedReset: 'Reset to normal speed',
+  },
+
+  music: {
+    title: 'Music',
+    hint: 'Pick the soundtrack for the whole map, or drag boxes to give areas their own track. Playtest switches as you cross them.',
+    zoneTrack: 'Map track',
+    default: 'Auto (biome theme)',
+    areasTitle: 'Music areas',
+    areaTrack: 'Track for new areas',
+    rowTrack: 'Track for this area',
+    dragHint:
+      'Drag a box on the ground to add an area with the track above. Click an area to select it (Delete removes it). Smaller areas win where they overlap.',
+    none: 'No music areas yet.',
+    areaN: 'Area {num}',
+    selectArea: 'Select this area in the world (its box highlights; Delete removes it)',
+    removeArea: 'Remove this music area',
+    areaCap: 'Music area limit reached ({max}).',
+    track: {
+      town_eastbrook: 'Town: Eastbrook (warm pastoral)',
+      town_fenbridge: 'Town: Fenbridge (old medieval)',
+      town_highwatch: 'Town: Highwatch (brisk march)',
+      vale: 'Vale (playful meadow)',
+      vale_legacy: 'Vale legacy (original theme)',
+      marsh: 'Marsh (croaky swamp)',
+      peaks: 'Peaks (heroic folk)',
+      dungeon_hollow_crypt: 'Dungeon: Hollow Crypt (skeletal dance)',
+      dungeon_sunken_bastion: 'Dungeon: Sunken Bastion (flooded fortress)',
+      dungeon_gravewyrm_sanctum: 'Dungeon: Gravewyrm Sanctum (boss route)',
+    },
+  },
+
+  weather: {
+    title: 'Weather',
+    auto: 'Auto',
+    clear: 'Clear',
+    rain: 'Rain',
+    snow: 'Snow',
+    sparkle: 'Golden sparkles',
+    intensity: 'Intensity',
+    cloudCover: 'Cloud cover',
+    cloudHeight: 'Cloud height (yd)',
+    cloudHint: 'Low clouds hug the terrain and read as rolling ground fog.',
+    scheduleTitle: 'Dynamic weather',
+    scheduleWins: 'A schedule is running: it overrides the fixed weather above.',
+    stepMode: 'Weather for this step',
+    stepMinutes: 'Minutes this step lasts',
+    minutesShort: 'min',
+    removeStep: 'Remove this step',
+    addStep: 'Add step',
+    addStepTitle: 'Cycle through the steps in order, each holding for its minutes, then repeat',
+    scheduleHint:
+      'Steps loop in order (Rain 5 min, then Clear 10 min, ...). Saves with the map and runs in playtest.',
+  },
+
+  camera: {
+    title: 'Camera',
+    focus: 'Focus selection (.)',
+    focusTitle:
+      'Move the orbit pivot onto the selected object so the camera revolves around it; with nothing selected, frame the whole map',
+    freeFly: 'Free-Fly (Shift+F)',
+    freeFlyHint: 'WASD moves, Q/E goes up and down, dragging looks around like first person.',
+    invertPan: 'Invert camera',
+    showBoundary: 'Show map boundary walls',
+    showPlayer: 'Show playtest player',
+    wireframe: 'Wireframe mode',
+    speedTitle: 'Movement speeds',
+    moveSpeed: 'WASD move speed',
+    lookSpeed: 'Mouse look speed',
+    panSpeed: 'Pan speed',
+    speedHint: 'How fast the viewport camera flies, looks, and pans. Editor only.',
+    resetSpeeds: 'Reset speeds',
+    perfTitle: 'Performance overlay',
+    perfShow: 'Show overlay in the viewport',
+    perfHint: 'A live readout pinned to the viewport corner while you edit.',
+    perfFps: 'FPS',
+    perfFrameMs: 'Frame time (ms)',
+    perfAssets: 'Placed assets',
+    perfTerrain: 'Terrain edits',
+    assetViewTitle: 'Asset view distance',
+    assetViewDistance: 'Placed assets fade out at',
+    assetViewMax: 'As far as the fog',
+    assetViewHint:
+      'How far placed decor renders before it fades out and stops drawing, to save performance. Lower it to cull distant assets sooner; raise it to see farther. Saved with the map, so playtest matches.',
+  },
+
   hints: {
-    nav3d: 'Drag to orbit, scroll to zoom. While dragging, WASD flies and Q/E changes height.',
+    nav3d:
+      'Middle-drag or Alt+drag orbits, Shift+drag pans, scroll zooms (Blender style, works with any tool). While dragging, WASD flies and Q/E changes height.',
     nav2d: 'Drag to pan, scroll to zoom.',
   },
 
@@ -388,35 +757,45 @@ export const editorStrings = {
     beginTutorial: 'Begin tutorial',
     close: 'Close',
     tool: {
-      select: 'Pick placed assets to move, rotate, and scale them; click a 2D marker to edit it.',
-      raise: 'Raise the terrain under the brush.',
+      select: 'Pick placed assets to inspect them; click a 2D marker to edit it.',
+      move: 'Move the selected asset with the 3-axis gizmo arrows.',
+      rotate: 'Rotate the selected asset with the gizmo rings.',
+      scale: 'Scale the selected asset with the gizmo handles, per axis or uniformly.',
+      raise: 'Raise or lower the terrain under the brush (checkbox flips the direction).',
       lower: 'Lower the terrain under the brush.',
       smooth: 'Smooth bumps toward the local average height.',
-      flatten: 'Level the ground to the height where the drag starts.',
+      flatten:
+        'Level the ground to the drag-start height, or smooth bumps (checkbox picks the mode).',
       paint: 'Paint biome ground cover over the zone default.',
       water: 'Set the map-wide water level.',
       place: 'Place catalog or uploaded assets on the ground.',
+      foliage: 'Brush-paint grass, bushes, trees, and rocks with size variation.',
       blocker: 'Drag invisible walls that block movement in playtest.',
+      collider: 'Drop box, sphere, or floor-plane collision volumes, invisible in playtest.',
       camp: 'Add and edit mob camps that spawn in playtest.',
       spawn: 'Set where playtest drops the player.',
       region: 'Box-select terrain and assets to copy and paste.',
-      erase: 'Remove placed assets or sculpt stamps under the cursor.',
+      erase: 'Remove placed assets or blocker walls under the cursor.',
     },
     key: {
-      tools: 'Every tool has a single-letter shortcut, shown on its button in the tool rail.',
+      tools:
+        'Most tools have a single-letter shortcut, shown on their buttons in the tool rail. X deletes the selected assets; Region and Erase are click-only.',
       brush: '[ and ] resize the brush; Shift+[ and Shift+] change its strength.',
       undo: 'Ctrl+Z undoes the last change; Ctrl+Y or Ctrl+Shift+Z redoes it.',
       save: 'Ctrl+S saves the map.',
-      duplicate: 'Ctrl+D duplicates the selected asset.',
+      duplicate:
+        'Ctrl+D duplicates the selected asset; Shift+D duplicates the whole selection and lets the copies follow the cursor until you click.',
+      multiSelect: 'Shift+click adds or removes assets from the selection (Blender style).',
       nudge: 'Arrow keys nudge the selected asset by 0.5 yards; hold Shift for 2 yards.',
       wheel: 'Shift+scroll rotates the selected asset; Alt+scroll scales it.',
       delete: 'Delete removes the selected asset or camp.',
       escape: 'Esc clears the selection first, then returns to the Select tool.',
     },
     mouse: {
-      orbit3d: '3D view: drag to orbit and scroll to zoom; middle-drag or Shift+drag pans.',
+      orbit3d:
+        '3D view: middle-drag or Alt+drag orbits, Shift+drag pans, scroll zooms; navigation works with any tool active (Blender style; Invert pan flips the pan direction).',
       fly3d: 'While holding a drag in 3D, WASD flies the camera and Q/E changes height.',
-      move: 'With Select active, drag a placed asset to move it across the ground.',
+      move: 'With Move, Rotate, or Scale active, drag the gizmo handles to transform along an axis.',
       pan2d: '2D view: drag to pan and scroll to zoom.',
     },
     flow: {
@@ -441,7 +820,7 @@ export const editorStrings = {
       },
       stage: {
         title: 'The world',
-        body: 'This is your map, rendered with the real game engine. Drag to orbit, scroll to zoom, and middle-drag or Shift+drag to pan. Click the ground with a tool to edit.',
+        body: 'This is your map, rendered with the real game engine. Middle-drag or Alt+drag orbits, Shift+drag pans, and scroll zooms, with any tool active. Click the ground with a tool to edit.',
       },
       inspector: {
         title: 'Tool options',

@@ -7,6 +7,9 @@ import { el } from './dom';
 
 export type EditorTool =
   | 'select'
+  | 'move'
+  | 'rotate'
+  | 'scale'
   | 'raise'
   | 'lower'
   | 'smooth'
@@ -14,18 +17,30 @@ export type EditorTool =
   | 'paint'
   | 'water'
   | 'place'
+  | 'foliage'
   | 'blocker'
+  | 'collider'
   | 'camp'
   | 'spawn'
+  | 'zone'
+  | 'light'
+  | 'music'
   | 'region'
   | 'erase';
 
 export interface ToolDef {
   tool: EditorTool;
-  /** Single-key shortcut (lowercase). */
-  key: string;
+  /** Single-key shortcut (lowercase); absent = click-only tool (X deletes the
+   *  selection and E is reserved for Free-Fly height, so neither picks a tool). */
+  key?: string;
   labelKey:
+    | 'editor.tool.zone'
+    | 'editor.tool.light'
+    | 'editor.tool.music'
     | 'editor.tool.select'
+    | 'editor.tool.move'
+    | 'editor.tool.rotate'
+    | 'editor.tool.scale'
     | 'editor.tool.raise'
     | 'editor.tool.lower'
     | 'editor.tool.smooth'
@@ -33,7 +48,9 @@ export interface ToolDef {
     | 'editor.tool.paint'
     | 'editor.tool.water'
     | 'editor.tool.place'
+    | 'editor.tool.foliage'
     | 'editor.tool.blocker'
+    | 'editor.tool.collider'
     | 'editor.tool.camp'
     | 'editor.tool.spawn'
     | 'editor.tool.region'
@@ -43,23 +60,30 @@ export interface ToolDef {
 
 export const TOOL_DEFS: readonly ToolDef[] = [
   { tool: 'select', key: 'v', labelKey: 'editor.tool.select', icon: 'M6 3l12 9-6 1-3 6z' },
+  // Blender-style transform trio: G grab/move, R rotate, S scale.
+  {
+    tool: 'move',
+    key: 'g',
+    labelKey: 'editor.tool.move',
+    icon: 'M12 2v20M2 12h20M12 2l-2.5 2.5M12 2l2.5 2.5M12 22l-2.5-2.5M12 22l2.5-2.5M2 12l2.5-2.5M2 12l2.5 2.5M22 12l-2.5-2.5M22 12l-2.5 2.5',
+  },
+  {
+    tool: 'rotate',
+    key: 'r',
+    labelKey: 'editor.tool.rotate',
+    icon: 'M20 12a8 8 0 1 1-2.4-5.7M20 3v4.5h-4.5',
+  },
+  {
+    tool: 'scale',
+    key: 's',
+    labelKey: 'editor.tool.scale',
+    icon: 'M4 20L20 4M20 4h-6M20 4v6M4 20h6M4 20v-6',
+  },
   {
     tool: 'raise',
-    key: 'r',
+    key: 'u',
     labelKey: 'editor.tool.raise',
     icon: 'M3 19h18M6 19c2-6 4-9 6-9s4 3 6 9M12 3v5M9.5 5.5L12 3l2.5 2.5',
-  },
-  {
-    tool: 'lower',
-    key: 'l',
-    labelKey: 'editor.tool.lower',
-    icon: 'M3 19h18M6 19c2-4 4-6 6-6s4 2 6 6M12 3v6M9.5 6.5L12 9l2.5-2.5',
-  },
-  {
-    tool: 'smooth',
-    key: 'm',
-    labelKey: 'editor.tool.smooth',
-    icon: 'M3 15c3-4 6-4 9 0s6 4 9 0M5 8h14',
   },
   {
     tool: 'flatten',
@@ -86,10 +110,16 @@ export const TOOL_DEFS: readonly ToolDef[] = [
     icon: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 3v9M4 7.5l8 4.5 8-4.5',
   },
   {
-    tool: 'blocker',
-    key: 'k',
-    labelKey: 'editor.tool.blocker',
-    icon: 'M3 7h18v10H3zM3 12h18M9 7v5M15 12v5',
+    tool: 'foliage',
+    key: 't',
+    labelKey: 'editor.tool.foliage',
+    icon: 'M12 2l4.5 6h-2.5l4 5h-3.5l3.5 5H6l3.5-5H6l4-5H7.5zM12 18v4',
+  },
+  {
+    tool: 'collider',
+    key: 'o',
+    labelKey: 'editor.tool.collider',
+    icon: 'M4 10h10v10H4zM10 4h10v10h-4M10 4v6M20 4l-6 6',
   },
   {
     tool: 'camp',
@@ -99,26 +129,45 @@ export const TOOL_DEFS: readonly ToolDef[] = [
   },
   {
     tool: 'spawn',
-    key: 's',
+    key: 'n',
     labelKey: 'editor.tool.spawn',
     icon: 'M12 21v-8M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 21h8',
   },
   {
+    tool: 'zone',
+    key: 'z',
+    labelKey: 'editor.tool.zone',
+    icon: 'M4 6h12l4 6-4 6H4zM8 12h.01',
+  },
+  {
+    tool: 'light',
+    key: 'i',
+    labelKey: 'editor.tool.light',
+    icon: 'M12 3a6 6 0 0 1 3.5 10.9c-.9.7-1.5 1.6-1.5 2.6h-4c0-1-.6-1.9-1.5-2.6A6 6 0 0 1 12 3zM10 19h4M11 22h2',
+  },
+  {
+    tool: 'music',
+    key: 'm',
+    labelKey: 'editor.tool.music',
+    icon: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  },
+  {
     tool: 'region',
-    key: 'g',
     labelKey: 'editor.tool.region',
     icon: 'M4 4h4M10 4h4M16 4h4M4 4v4M4 10v4M4 16v4M4 20h4M10 20h4M16 20h4M20 4v4M20 10v4M20 16v4',
   },
   {
     tool: 'erase',
-    key: 'e',
     labelKey: 'editor.tool.erase',
     icon: 'M4 16l8-8 6 6-6 6H8zM10 22h10M9 11l6 6',
   },
 ];
 
 export const TOOL_BY_KEY: ReadonlyMap<string, EditorTool> = new Map(
-  TOOL_DEFS.map((d) => [d.key, d.tool]),
+  TOOL_DEFS.filter((d): d is ToolDef & { key: string } => d.key !== undefined).map((d) => [
+    d.key,
+    d.tool,
+  ]),
 );
 
 function iconSvg(path: string): SVGSVGElement {
@@ -155,7 +204,7 @@ export class Toolbar {
         this.root.appendChild(sep);
       }
       const name = t(def.labelKey);
-      const tip = t('editor.tool.keyHint', { name, key: def.key.toUpperCase() });
+      const tip = def.key ? t('editor.tool.keyHint', { name, key: def.key.toUpperCase() }) : name;
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'ed-tool';
@@ -164,9 +213,11 @@ export class Toolbar {
       b.setAttribute('aria-label', tip);
       b.setAttribute('aria-pressed', 'false');
       b.appendChild(iconSvg(def.icon));
-      const kbd = el('span', 'ed-tool-key', def.key.toUpperCase());
-      kbd.setAttribute('aria-hidden', 'true');
-      b.appendChild(kbd);
+      if (def.key) {
+        const kbd = el('span', 'ed-tool-key', def.key.toUpperCase());
+        kbd.setAttribute('aria-hidden', 'true');
+        b.appendChild(kbd);
+      }
       b.addEventListener('click', () => onPick(def.tool));
       this.buttons.set(def.tool, b);
       this.root.appendChild(b);

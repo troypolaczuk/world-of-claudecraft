@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   customMapFromContent,
   customMapToWorldContent,
   newCustomMap,
+  newFlatCustomMap,
 } from '../src/editor/custom_map';
 import { type KeyValueStore, MapStore, parseMap, serializeMap } from '../src/editor/persist';
+import { setActiveWorldContent } from '../src/sim/data';
+import { Sim } from '../src/sim/sim';
+import { terrainHeight } from '../src/sim/world';
 
 function memStore(): KeyValueStore {
   const m = new Map<string, string>();
@@ -15,6 +19,10 @@ function memStore(): KeyValueStore {
     },
   };
 }
+
+afterEach(() => {
+  setActiveWorldContent(null);
+});
 
 describe('CustomMap build + projection', () => {
   it('newCustomMap seeds from the built-in world and is non-empty', () => {
@@ -32,6 +40,51 @@ describe('CustomMap build + projection', () => {
     expect(w.props).toBeTruthy();
     expect(w.playerStart).toBeTruthy();
     expect(w.terrainEdits).toHaveLength(1);
+  });
+
+  it('newFlatCustomMap starts from empty content, empty props, and flat terrain', () => {
+    const map = newFlatCustomMap('Flat', 'flat-id', 1000);
+    const w = customMapToWorldContent(map);
+    expect(map.propsMode).toBe('empty');
+    expect(map.presentationMode).toBe('blank');
+    expect(map.content.camps).toEqual([]);
+    expect(map.content.npcs).toEqual({});
+    expect(map.content.objects).toEqual([]);
+    expect(map.content.roads).toEqual([]);
+    expect(map.terrainEdits).toHaveLength(4);
+    expect(map.terrainEdits.every((s) => s.delta === 0 && s.falloff === 'flat')).toBe(true);
+    expect(map.decorationsMode).toBe('empty');
+    expect(w.props.buildings).toEqual([]);
+    expect(w.decorationsMode).toBe('empty');
+    expect(w.presentationMode).toBe('blank');
+    expect(w.playerStart).toEqual({ x: 0, z: 0 });
+    expect(w.waterLevel).toBe(-40);
+    setActiveWorldContent(w);
+    for (const [x, z] of [
+      [-170, -50],
+      [170, -50],
+      [-170, 410],
+      [170, 410],
+      [0, 0],
+      [0, 420],
+    ] as const) {
+      expect(terrainHeight(x, z, map.meta.seed)).toBeCloseTo(0, 6);
+    }
+    setActiveWorldContent(null);
+  });
+
+  it('newFlatCustomMap does not spawn built-in dungeon door objects', () => {
+    const regular = new Sim({ seed: 1000, playerClass: 'warrior', noPlayer: true });
+    expect([...regular.entities.values()].some((e) => e.templateId === 'dungeon_door')).toBe(true);
+
+    const map = newFlatCustomMap('Flat', 'flat-id', 1000);
+    const flat = new Sim({
+      seed: map.meta.seed,
+      playerClass: 'warrior',
+      noPlayer: true,
+      world: customMapToWorldContent(map),
+    });
+    expect([...flat.entities.values()].some((e) => e.templateId === 'dungeon_door')).toBe(false);
   });
 
   it('customMapFromContent deep-clones (independent of later edits)', () => {

@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import {
   CAMPS,
   DUNGEON_X_THRESHOLD,
+  getActiveWorldContent,
   WORLD_MAX_X,
   WORLD_MAX_Z,
   WORLD_MIN_Z,
@@ -1733,8 +1734,11 @@ export function buildFoliage(seed: number): FoliageView {
   let modelVisibleTrianglesByLod: Record<string, number> = {};
   let modelDraws = 0;
   let modelTriangles = 0;
-  buildTrees(group, seed, bucketMeshes, treeHideables);
-  buildDressing(group, seed, bucketMeshes);
+  const blankSlate = getActiveWorldContent().presentationMode === 'blank';
+  if (!blankSlate) {
+    buildTrees(group, seed, bucketMeshes, treeHideables);
+    buildDressing(group, seed, bucketMeshes);
+  }
   for (const b of bucketMeshes) {
     modelBucketsByLod[b.lod] = (modelBucketsByLod[b.lod] ?? 0) + 1;
     modelDraws += b.draws;
@@ -1742,15 +1746,16 @@ export function buildFoliage(seed: number): FoliageView {
     modelDrawsByLod[b.lod] = (modelDrawsByLod[b.lod] ?? 0) + b.draws;
     modelTrianglesByLod[b.lod] = (modelTrianglesByLod[b.lod] ?? 0) + b.triangles;
   }
-  const grass = localGrassDisabled()
-    ? {
-        update(): void {},
-        setQuality(): void {},
-        perfStats(): FoliagePerfStats {
-          return emptyGrassStats(false);
-        },
-      }
-    : buildGrassRing(group, seed);
+  const grass =
+    blankSlate || localGrassDisabled()
+      ? {
+          update(): void {},
+          setQuality(): void {},
+          perfStats(): FoliagePerfStats {
+            return emptyGrassStats(!blankSlate);
+          },
+        }
+      : buildGrassRing(group, seed);
   return {
     group,
     setGrassQuality(level: number): void {

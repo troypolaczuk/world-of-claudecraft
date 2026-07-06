@@ -7,7 +7,13 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { DUNGEON_X_THRESHOLD, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_Z } from '../sim/data';
+import {
+  DUNGEON_X_THRESHOLD,
+  getActiveWorldContent,
+  WORLD_MAX_X,
+  WORLD_MAX_Z,
+  WORLD_MIN_Z,
+} from '../sim/data';
 import { terrainHeight, waterLevel } from '../sim/world';
 import { GFX } from './gfx';
 
@@ -118,6 +124,9 @@ interface Critter {
 export function buildCritters(seed: number): CritterField {
   const group = new THREE.Group();
   group.name = 'critters';
+  if (getActiveWorldContent().presentationMode === 'blank') {
+    return { group, update(): void {} };
+  }
   const rng = mulberry32(seed ^ 0x6c12a7);
   const count = GFX.standardMaterials ? 16 : 7;
 

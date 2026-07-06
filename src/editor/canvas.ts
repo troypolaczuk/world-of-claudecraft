@@ -124,16 +124,24 @@ function drawBiomePaint(
 ): void {
   const sizePx = bp.cell * cam.pxPerYard;
   if (sizePx < 0.5) return;
+  // Custom swatch colors (maker palette additions) by painted id.
+  const customFill = new Map<number, string>();
+  for (const sw of bp.custom ?? []) {
+    const c = sw.color;
+    customFill.set(sw.id, `rgba(${(c >> 16) & 0xff},${(c >> 8) & 0xff},${c & 0xff},0.4)`);
+  }
   ctx.save();
   for (let row = 0; row < bp.rows; row++) {
     for (let col = 0; col < bp.cols; col++) {
       const id = bp.ids[row * bp.cols + col];
-      if (id < 0 || id >= BIOME_PAINT_COLOR.length) continue;
+      const fill =
+        id >= 0 && id < BIOME_PAINT_COLOR.length ? BIOME_PAINT_COLOR[id] : customFill.get(id);
+      if (!fill) continue;
       const wx = bp.originX + col * bp.cell;
       const wz = bp.originZ + row * bp.cell;
       const s = cam.worldToScreen({ x: wx, z: wz }, vp);
       if (s.sx + sizePx < 0 || s.sx > vp.width || s.sy + sizePx < 0 || s.sy > vp.height) continue;
-      ctx.fillStyle = BIOME_PAINT_COLOR[id];
+      ctx.fillStyle = fill;
       ctx.fillRect(s.sx, s.sy, sizePx + 1, sizePx + 1);
     }
   }
@@ -183,6 +191,9 @@ function drawPlacements(
 ): void {
   ctx.save();
   for (const p of placements) {
+    // Scene Collection eyeball hides a placement in the editor only; the 2D map
+    // overlay honors it too (the 3D view already skips it via hideHidden).
+    if (p.hidden) continue;
     const c = cam.worldToScreen(p, vp);
     if (c.sx < -20 || c.sx > vp.width + 20 || c.sy < -20 || c.sy > vp.height + 20) continue;
     const r = 5;

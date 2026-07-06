@@ -524,6 +524,9 @@ describe('round trip (the server never stores an unloadable byte)', () => {
       ],
       waterLevel: 3,
       playerStart: { x: 3, z: 4 },
+      propsMode: 'empty',
+      decorationsMode: 'empty',
+      presentationMode: 'blank',
       biomePaint: { cell: 20, cols: 2, rows: 2, originX: 0, originZ: 0, ids: [0, 1, 2, 255] },
     });
     const first = sanitizeMapDoc(nasty);

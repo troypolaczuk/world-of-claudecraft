@@ -9,6 +9,7 @@ import { button, el } from './dom';
 export interface TopbarDeps {
   onNameChange(name: string): void;
   onNew(): void;
+  onNewFlat(): void;
   onOpen(): void;
   onSave(): void;
   onSaveAs(): void;
@@ -17,6 +18,8 @@ export interface TopbarDeps {
   onImport(): void;
   onExport(): void;
   onUploadAsset(): void;
+  onImportModel(): void;
+  onSettings(): void;
   onPlaytest(): void;
   onViewMode(mode: '3d' | '2d'): void;
   onUndo(): void;
@@ -38,6 +41,8 @@ export class Topbar {
   private readonly undoBtn: HTMLButtonElement;
   private readonly redoBtn: HTMLButtonElement;
   private readonly viewButtons = new Map<'3d' | '2d', HTMLButtonElement>();
+  private moreBtn!: HTMLButtonElement;
+  private moreMenu!: HTMLElement;
 
   constructor(parent: HTMLElement, deps: TopbarDeps) {
     this.root = el('header', 'ed-topbar');
@@ -108,21 +113,21 @@ export class Topbar {
     this.offlineBadge.append(offLabel, signIn);
     this.root.appendChild(this.offlineBadge);
 
-    // Actions grouped by intent (document | save | exchange | help) with thin
-    // decorative separators so the row reads as four families, not ten twins.
+    // Actions: the everyday four stay visible (New Map, Open, Save, Import
+    // Model); everything less frequent folds into the More menu so the bar
+    // stays uncluttered at common window widths.
     const actions = el('div', 'ed-actions');
-    const sep = (): void => {
-      const s = el('span', 'ed-tb-sep');
-      s.setAttribute('aria-hidden', 'true');
-      actions.appendChild(s);
-    };
     actions.appendChild(
-      button(t('editor.topbar.new'), deps.onNew, undefined, t('editor.topbar.newTitle')),
+      button(
+        t('editor.topbar.newFlat'),
+        deps.onNewFlat,
+        undefined,
+        t('editor.topbar.newFlatTitle'),
+      ),
     );
     actions.appendChild(
       button(t('editor.topbar.open'), deps.onOpen, undefined, t('editor.topbar.openTitle')),
     );
-    sep();
     this.saveBtn = button(
       t('editor.topbar.save'),
       deps.onSave,
@@ -130,6 +135,44 @@ export class Topbar {
       t('editor.topbar.saveTitle'),
     );
     actions.appendChild(this.saveBtn);
+    // Local model import: works fully offline (never disabled, unlike upload).
+    actions.appendChild(
+      button(
+        t('editor.topbar.importModel'),
+        deps.onImportModel,
+        undefined,
+        t('editor.topbar.importModelTitle'),
+      ),
+    );
+
+    // The More menu: secondary document, save, and exchange actions.
+    const moreWrap = el('div', 'ed-more-wrap');
+    this.moreBtn = button(
+      t('editor.topbar.more'),
+      () => this.toggleMore(),
+      'ed-more-btn',
+      t('editor.topbar.moreTitle'),
+    );
+    this.moreBtn.setAttribute('aria-haspopup', 'true');
+    this.moreBtn.setAttribute('aria-expanded', 'false');
+    this.moreMenu = el('div', 'ed-more-menu');
+    this.moreMenu.style.display = 'none';
+    this.moreMenu.setAttribute('role', 'menu');
+    const item = (b: HTMLButtonElement): HTMLButtonElement => {
+      b.addEventListener('click', () => this.closeMore());
+      this.moreMenu.appendChild(b);
+      return b;
+    };
+    const menuSep = (): void => {
+      const s = el('span', 'ed-more-sep');
+      s.setAttribute('aria-hidden', 'true');
+      this.moreMenu.appendChild(s);
+    };
+    item(button(t('editor.topbar.new'), deps.onNew, undefined, t('editor.topbar.newTitle')));
+    menuSep();
+    item(
+      button(t('editor.topbar.saveAs'), deps.onSaveAs, undefined, t('editor.topbar.saveAsTitle')),
+    );
     // Autosave toggle: default off; the app flips it and pushes state back via
     // setAutosave (it also turns itself off after a save error).
     this.autosaveBtn = button(
@@ -139,22 +182,19 @@ export class Topbar {
       t('editor.topbar.autosaveTitle'),
     );
     this.autosaveBtn.setAttribute('aria-pressed', 'false');
-    actions.appendChild(this.autosaveBtn);
-    actions.appendChild(
-      button(t('editor.topbar.saveAs'), deps.onSaveAs, undefined, t('editor.topbar.saveAsTitle')),
-    );
+    this.moreMenu.appendChild(this.autosaveBtn); // stays open: it is a toggle
     this.forkBtn = button(
       t('editor.topbar.fork'),
       deps.onFork,
       undefined,
       t('editor.topbar.forkTitle'),
     );
-    actions.appendChild(this.forkBtn);
-    sep();
-    actions.appendChild(
+    item(this.forkBtn);
+    menuSep();
+    item(
       button(t('editor.topbar.import'), deps.onImport, undefined, t('editor.topbar.importTitle')),
     );
-    actions.appendChild(
+    item(
       button(t('editor.topbar.export'), deps.onExport, undefined, t('editor.topbar.exportTitle')),
     );
     this.uploadBtn = button(
@@ -163,8 +203,27 @@ export class Topbar {
       undefined,
       t('editor.topbar.uploadAssetTitle'),
     );
-    actions.appendChild(this.uploadBtn);
-    sep();
+    item(this.uploadBtn);
+    menuSep();
+    // In-game settings (graphics + sound): tweak the same persisted settings the
+    // playtest boots with, straight from the editor.
+    item(
+      button(
+        t('editor.topbar.settings'),
+        deps.onSettings,
+        undefined,
+        t('editor.topbar.settingsTitle'),
+      ),
+    );
+    moreWrap.append(this.moreBtn, this.moreMenu);
+    actions.appendChild(moreWrap);
+    // A press anywhere outside the open menu closes it.
+    document.addEventListener('pointerdown', (ev) => {
+      if (this.moreMenu.style.display !== 'none' && !moreWrap.contains(ev.target as Node)) {
+        this.closeMore();
+      }
+    });
+
     // Help: the guide modal + tutorial entry (also the tour's last anchor).
     actions.appendChild(
       button(t('editor.topbar.help'), deps.onHelp, 'ed-help', t('editor.topbar.helpTitle')),
@@ -196,6 +255,19 @@ export class Topbar {
     this.root.appendChild(play);
 
     parent.appendChild(this.root);
+  }
+
+  private toggleMore(): void {
+    const open = this.moreMenu.style.display === 'none';
+    this.moreMenu.style.display = open ? '' : 'none';
+    this.moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    this.moreBtn.classList.toggle('active', open);
+  }
+
+  private closeMore(): void {
+    this.moreMenu.style.display = 'none';
+    this.moreBtn.setAttribute('aria-expanded', 'false');
+    this.moreBtn.classList.remove('active');
   }
 
   setMapName(name: string): void {

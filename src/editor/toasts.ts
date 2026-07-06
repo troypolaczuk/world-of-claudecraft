@@ -53,13 +53,15 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
-interface ModalHandles {
+export interface ModalHandles {
   overlay: HTMLElement;
   panel: HTMLElement;
   close(): void;
 }
 
-function buildModal(parent: HTMLElement, title: string, onClose: () => void): ModalHandles {
+/** Shared modal chrome (overlay, panel, title, Escape/backdrop dismissal);
+ *  richer dialogs (new-map size) compose it from their own modules. */
+export function buildModal(parent: HTMLElement, title: string, onClose: () => void): ModalHandles {
   const overlay = el('div', 'ed-modal-overlay');
   const panel = el('div', 'ed-modal');
   panel.setAttribute('role', 'dialog');
